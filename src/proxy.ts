@@ -11,7 +11,7 @@ export async function proxy(request: NextRequest) {
   try {
     const { default: NextAuth } = await import("next-auth");
     const { authConfig } = await import("./auth.config");
-    const handler = NextAuth(authConfig).auth as (req: NextRequest) => Promise<Response | undefined>;
+    const handler = NextAuth(authConfig).auth as unknown as (req: NextRequest) => Promise<Response | undefined>;
     const result = await handler(request);
     return result ?? NextResponse.next();
   } catch (err) {
