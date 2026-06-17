@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ───────────────────────────────────────────────────────────────
+
+model User {
+  id             String           @id @default(cuid())
+  username       String           @unique
+  passwordHash   String
+  name           String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  assessments    Assessment[]
+  carbonProfiles CarbonProfile[]
+  recommendations Recommendation[]
+  simulations    Simulation[]
+  reports        Report[]
+
+  @@index([username])
+  @@map("users")
+}
+
+// ─── Assessment ─────────────────────────────────────────────────────────
+
+model Assessment {
+  id            String           @id @default(cuid())
+  userId        String
+  transportData Json
+  foodData      Json
+  energyData    Json
+  shoppingData  Json
+  digitalData   Json
+  status        AssessmentStatus @default(IN_PROGRESS)
+  completedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  carbonProfile CarbonProfile?
+
+  @@index([userId])
+  @@index([status])
+  @@map("assessments")
+}
+
+enum AssessmentStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+// ─── Carbon Profile ─────────────────────────────────────────────────────
+
+model CarbonProfile {
+  id                  String           @id @default(cuid())
+  userId              String
+  assessmentId        String           @unique
+  totalEmissions      Float
+  transportEmissions  Float
+  foodEmissions       Float
+  energyEmissions     Float
+  shoppingEmissions   Float
+  digitalEmissions    Float
+  category            EmissionCategory
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assessment          Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  recommendations     Recommendation[]
+  simulations         Simulation[]
+  reports             Report[]
+
+  @@index([userId])
+  @@map("carbon_profiles")
+}
+
+enum EmissionCategory {
+  LOW        // < 4 tonnes/year
+  MODERATE   // 4-8 tonnes/year
+  HIGH       // 8-12 tonnes/year
+  VERY_HIGH  // > 12 tonnes/year
+}
+
+// ─── Recommendation ─────────────────────────────────────────────────────
+
+model Recommendation {
+  id                 String               @id @default(cuid())
+  userId             String
+  profileId          String
+  category           CarbonCategory
+  title              String
+  description        String               @db.Text
+  potentialReduction Float
+  difficulty         Difficulty
+  status             RecommendationStatus @default(PENDING)
+  createdAt          DateTime             @default(now())
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile            CarbonProfile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([profileId])
+  @@map("recommendations")
+}
+
+enum CarbonCategory {
+  TRANSPORT
+  FOOD
+  ENERGY
+  SHOPPING
+  DIGITAL
+}
+
+enum Difficulty {
+  EASY
+  MODERATE
+  HARD
+}
+
+enum RecommendationStatus {
+  PENDING
+  ACCEPTED
+  COMPLETED
+  DISMISSED
+}
+
+// ─── Simulation ─────────────────────────────────────────────────────────
+
+model Simulation {
+  id                  String        @id @default(cuid())
+  userId              String
+  profileId           String
+  changes             Json
+  originalEmissions   Float
+  simulatedEmissions  Float
+  reductionPercentage Float
+  aiExplanation       String?       @db.Text
+  createdAt           DateTime      @default(now())
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile             CarbonProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([profileId])
+  @@map("simulations")
+}
+
+// ─── Report ─────────────────────────────────────────────────────────────
+
+model Report {
+  id          String        @id @default(cuid())
+  userId      String
+  profileId   String
+  reportType  ReportType
+  content     Json
+  aiSummary   String?       @db.Text
+  carbonTwin  String?       @db.Text
+  createdAt   DateTime      @default(now())
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile     CarbonProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([profileId])
+  @@map("reports")
+}
+
+enum ReportType {
+  SUMMARY
+  DETAILED
+  COMPARISON
+}
