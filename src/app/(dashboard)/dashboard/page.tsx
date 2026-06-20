@@ -12,25 +12,25 @@ import { Button } from "@/components/ui/button";
 import { EmissionChart } from "@/components/dashboard/EmissionChart";
 import { RefreshButton } from "@/components/dashboard/RefreshButton";
 
-const CATEGORY_META: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
-  TRANSPORT: { label: "Transport", icon: Car, color: "text-blue-400", bg: "bg-blue-500/10" },
-  FOOD: { label: "Food & Diet", icon: Utensils, color: "text-orange-400", bg: "bg-orange-500/10" },
-  ENERGY: { label: "Energy", icon: Zap, color: "text-yellow-400", bg: "bg-yellow-500/10" },
-  SHOPPING: { label: "Shopping", icon: ShoppingBag, color: "text-purple-400", bg: "bg-purple-500/10" },
-  DIGITAL: { label: "Digital", icon: Laptop, color: "text-cyan-400", bg: "bg-cyan-500/10" },
+export const revalidate = 30; // Cache dashboard page for 30 seconds (ISR)
+
+const GLOBAL_AVERAGE_EMISSIONS = 4.7;
+
+const CATEGORY_META: Record<
+  string,
+  { label: string; icon: React.ElementType; color: string; bg: string; hex: string }
+> = {
+  TRANSPORT: { label: "Transport", icon: Car, color: "text-blue-400", bg: "bg-blue-500/10", hex: "#60a5fa" },
+  FOOD: { label: "Food & Diet", icon: Utensils, color: "text-orange-400", bg: "bg-orange-500/10", hex: "#fb923c" },
+  ENERGY: { label: "Energy", icon: Zap, color: "text-yellow-400", bg: "bg-yellow-500/10", hex: "#facc15" },
+  SHOPPING: { label: "Shopping", icon: ShoppingBag, color: "text-purple-400", bg: "bg-purple-500/10", hex: "#c084fc" },
+  DIGITAL: { label: "Digital", icon: Laptop, color: "text-cyan-400", bg: "bg-cyan-500/10", hex: "#22d3ee" },
 };
 
 const DIFFICULTY_META = {
   EASY: { label: "Easy", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
   MODERATE: { label: "Moderate", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" },
   HARD: { label: "Hard", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
-};
-
-const STATUS_META = {
-  PENDING: { label: "Pending", icon: Clock, color: "text-muted-foreground" },
-  ACCEPTED: { label: "Accepted", icon: CheckCircle2, color: "text-emerald-400" },
-  COMPLETED: { label: "Done", icon: CheckCircle2, color: "text-emerald-400" },
-  DISMISSED: { label: "Dismissed", icon: XCircle, color: "text-muted-foreground" },
 };
 
 const EMISSION_CATEGORY_META = {
@@ -40,24 +40,70 @@ const EMISSION_CATEGORY_META = {
   VERY_HIGH: { label: "Very High Emitter 🔥", color: "text-red-400", bg: "bg-red-500/10 border-red-500/30", compare: "well above global average" },
 };
 
+interface ProfileEmissions {
+  transportEmissions: number;
+  foodEmissions: number;
+  energyEmissions: number;
+  shoppingEmissions: number;
+  digitalEmissions: number;
+}
+
+/**
+ * Extracts list of emission categories sorted by their contribution values.
+ */
+function getSortedCategories(profile: ProfileEmissions) {
+  return [
+    { key: "TRANSPORT", val: profile.transportEmissions },
+    { key: "FOOD", val: profile.foodEmissions },
+    { key: "ENERGY", val: profile.energyEmissions },
+    { key: "SHOPPING", val: profile.shoppingEmissions },
+    { key: "DIGITAL", val: profile.digitalEmissions },
+  ];
+}
+
 export default async function DashboardPage() {
   const session = await auth();
+  const userId = session?.user?.id;
 
   const [latestProfile, recommendations, allProfiles] = await Promise.all([
-    prisma.carbonProfile.findFirst({
-      where: { userId: session?.user?.id },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.recommendation.findMany({
-      where: { userId: session?.user?.id },
-      orderBy: [{ potentialReduction: "desc" }],
-      take: 6,
-    }),
-    prisma.carbonProfile.findMany({
-      where: { userId: session?.user?.id },
-      orderBy: { createdAt: "asc" },
-      select: { totalEmissions: true, createdAt: true },
-    }),
+    userId
+      ? prisma.carbonProfile.findFirst({
+          where: { userId },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            totalEmissions: true,
+            transportEmissions: true,
+            foodEmissions: true,
+            energyEmissions: true,
+            shoppingEmissions: true,
+            digitalEmissions: true,
+            category: true,
+          },
+        })
+      : null,
+    userId
+      ? prisma.recommendation.findMany({
+          where: { userId },
+          orderBy: [{ potentialReduction: "desc" }],
+          take: 6,
+          select: {
+            id: true,
+            category: true,
+            difficulty: true,
+            title: true,
+            description: true,
+            potentialReduction: true,
+          },
+        })
+      : [],
+    userId
+      ? prisma.carbonProfile.findMany({
+          where: { userId },
+          orderBy: { createdAt: "asc" },
+          select: { totalEmissions: true, createdAt: true },
+        })
+      : [],
   ]);
 
   return (
@@ -143,13 +189,7 @@ export default async function DashboardPage() {
 
               {/* Highest category */}
               {(() => {
-                const cats = [
-                  { key: "TRANSPORT", val: latestProfile.transportEmissions },
-                  { key: "FOOD", val: latestProfile.foodEmissions },
-                  { key: "ENERGY", val: latestProfile.energyEmissions },
-                  { key: "SHOPPING", val: latestProfile.shoppingEmissions },
-                  { key: "DIGITAL", val: latestProfile.digitalEmissions },
-                ];
+                const cats = getSortedCategories(latestProfile);
                 const highest = cats.reduce((a, b) => (a.val > b.val ? a : b));
                 const meta = CATEGORY_META[highest.key];
                 const Icon = meta.icon;
@@ -183,13 +223,13 @@ export default async function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold">
-                    {latestProfile.totalEmissions > 4.7
-                      ? `+${(latestProfile.totalEmissions - 4.7).toFixed(1)}`
-                      : `-${(4.7 - latestProfile.totalEmissions).toFixed(1)}`}
+                    {latestProfile.totalEmissions > GLOBAL_AVERAGE_EMISSIONS
+                      ? `+${(latestProfile.totalEmissions - GLOBAL_AVERAGE_EMISSIONS).toFixed(1)}`
+                      : `-${(GLOBAL_AVERAGE_EMISSIONS - latestProfile.totalEmissions).toFixed(1)}`}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">vs 4.7t global avg</div>
-                  <div className={`text-xs mt-2 font-medium ${latestProfile.totalEmissions <= 4.7 ? "text-emerald-400" : "text-orange-400"}`}>
-                    {latestProfile.totalEmissions <= 4.7 ? (
+                  <div className={`text-xs mt-2 font-medium ${latestProfile.totalEmissions <= GLOBAL_AVERAGE_EMISSIONS ? "text-emerald-400" : "text-orange-400"}`}>
+                    {latestProfile.totalEmissions <= GLOBAL_AVERAGE_EMISSIONS ? (
                       <span className="flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Below average 🎉</span>
                     ) : (
                       <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Above average</span>
@@ -243,13 +283,7 @@ export default async function DashboardPage() {
                   <CardDescription>Ranked by impact</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {[
-                    { key: "TRANSPORT", val: latestProfile.transportEmissions },
-                    { key: "FOOD", val: latestProfile.foodEmissions },
-                    { key: "ENERGY", val: latestProfile.energyEmissions },
-                    { key: "SHOPPING", val: latestProfile.shoppingEmissions },
-                    { key: "DIGITAL", val: latestProfile.digitalEmissions },
-                  ]
+                  {getSortedCategories(latestProfile)
                     .sort((a, b) => b.val - a.val)
                     .map(({ key, val }) => {
                       const meta = CATEGORY_META[key];
@@ -268,7 +302,7 @@ export default async function DashboardPage() {
                             <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all`}
-                                style={{ width: `${pct}%`, backgroundColor: meta.color.replace("text-", "").includes("blue") ? "#60a5fa" : meta.color.includes("orange") ? "#fb923c" : meta.color.includes("yellow") ? "#facc15" : meta.color.includes("purple") ? "#c084fc" : "#22d3ee" }}
+                                style={{ width: `${pct}%`, backgroundColor: meta.hex }}
                               />
                             </div>
                           </div>
@@ -297,14 +331,14 @@ export default async function DashboardPage() {
                     <p className="text-muted-foreground text-sm">
                       AI recommendations are being generated. Refresh in a few seconds.
                     </p>
-                  <RefreshButton className="mt-4" />
+                    <RefreshButton className="mt-4" />
                   </CardContent>
                 </Card>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {recommendations.map((rec) => {
                     const catMeta = CATEGORY_META[rec.category];
-                    const diffMeta = DIFFICULTY_META[rec.difficulty];
+                    const diffMeta = DIFFICULTY_META[rec.difficulty as keyof typeof DIFFICULTY_META];
                     const Icon = catMeta.icon;
                     return (
                       <Card
@@ -368,3 +402,4 @@ export default async function DashboardPage() {
     </div>
   );
 }
+

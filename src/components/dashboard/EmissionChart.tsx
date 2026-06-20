@@ -21,19 +21,35 @@ interface EmissionChartProps {
   data: DataPoint[];
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    value: number;
+    name: string;
+    color?: string;
+    payload?: {
+      color?: string;
+    };
+  }>;
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
+    const dataVal = payload[0].value;
+    const color = payload[0].payload?.color || payload[0].color || "var(--primary)";
     return (
       <div className="bg-card border border-border rounded-xl px-3 py-2 shadow-lg text-sm">
         <p className="font-semibold text-foreground mb-0.5">{label}</p>
-        <p style={{ color: payload[0].fill }} className="font-bold">
-          {payload[0].value.toFixed(3)} t CO₂e/yr
+        <p style={{ color }} className="font-bold">
+          {typeof dataVal === "number" ? dataVal.toFixed(3) : dataVal} t CO₂e/yr
         </p>
       </div>
     );
   }
   return null;
 };
+
 
 export function EmissionChart({ data }: EmissionChartProps) {
   return (

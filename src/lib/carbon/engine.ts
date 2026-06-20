@@ -26,6 +26,13 @@ export const TRANSPORT_FACTORS = {
   FLIGHT_LONG: 1500,    // kg CO2e per long-haul flight
 } as const;
 
+/**
+ * Calculates carbon emissions related to transportation.
+ * Factor inputs include commute mode, distance, days of travel per week, and flight counts.
+ * 
+ * @param input Commute and flight patterns.
+ * @returns Object containing total annual emissions in kg CO2e and its breakdown.
+ */
 export function calculateTransport(input: TransportInput): CategoryResult {
   const weeklyCommuteDistance = input.commuteDistanceKm * 2 * input.commuteDaysPerWeek; // round trip
   const annualCommuteDistance = weeklyCommuteDistance * 52;
@@ -56,6 +63,13 @@ export const DIET_BASE_EMISSIONS = {
   MEAT_HEAVY: 3300,
 } as const;
 
+/**
+ * Calculates carbon emissions related to diet and food waste.
+ * Factors in base diet emissions, offset by local food choices and penalized by waste level.
+ * 
+ * @param input Diet choices, local source share, waste share, and dining frequency.
+ * @returns Object containing total annual emissions in kg CO2e and its breakdown.
+ */
 export function calculateFood(input: FoodInput): CategoryResult {
   const baseEmissions = DIET_BASE_EMISSIONS[input.dietType] ?? 2000;
   
@@ -90,6 +104,13 @@ export const HEATING_BASE = {
   WOOD: 800,
 } as const;
 
+/**
+ * Calculates carbon emissions related to household energy and fuel consumption.
+ * Combines electricity, gas, and primary heating fuel, divided by household size.
+ * 
+ * @param input Utility usage, heating type, renewable share, and household size.
+ * @returns Object containing total annual emissions in kg CO2e and its breakdown.
+ */
 export function calculateEnergy(input: EnergyInput): CategoryResult {
   const annualElectricity = input.electricityKwhPerMonth * 12;
   // Grid electricity factor 0.38 kg/kWh, offset by renewables
@@ -122,6 +143,13 @@ export const SHOPPING_FACTORS = {
   FURNITURE: 80,        // kg CO2e per item
 } as const;
 
+/**
+ * Calculates carbon emissions associated with purchasing new goods/furniture/clothing.
+ * Applies a significant discount if a percentage of the items are bought secondhand.
+ * 
+ * @param input Item counts per category and secondhand purchase percentage.
+ * @returns Object containing total annual emissions in kg CO2e and its breakdown.
+ */
 export function calculateShopping(input: ShoppingInput): CategoryResult {
   const rawEmissions = (input.clothingItemsPerYear * SHOPPING_FACTORS.CLOTHING) +
                        (input.electronicsPerYear * SHOPPING_FACTORS.ELECTRONICS) +
@@ -149,6 +177,13 @@ export const DIGITAL_FACTORS = {
   DEVICE_ANNUAL: 30,                  // annual kg CO2e per device owned (amortized)
 } as const;
 
+/**
+ * Calculates carbon emissions from digital usage, including screen time,
+ * video streaming data center cost, cloud storage scale, and hardware devices.
+ * 
+ * @param input Daily screen/streaming hours, cloud storage size, and hardware device counts.
+ * @returns Object containing total annual emissions in kg CO2e and its breakdown.
+ */
 export function calculateDigital(input: DigitalInput): CategoryResult {
   const screenEmissions = input.screenHoursPerDay * DIGITAL_FACTORS.SCREEN_HOUR_DAILY;
   const streamingEmissions = input.streamingHoursPerDay * DIGITAL_FACTORS.STREAMING_HOUR_DAILY;
@@ -170,6 +205,12 @@ export function calculateDigital(input: DigitalInput): CategoryResult {
 
 // ─── Aggregator & Profile Generator ─────────────────────────────────────────
 
+/**
+ * Categorizes a carbon footprint based on its yearly emissions in tonnes of CO2e.
+ * 
+ * @param totalTonnes Total emissions in metric tonnes.
+ * @returns An emission category string ("LOW", "MODERATE", "HIGH", or "VERY_HIGH").
+ */
 export function getEmissionCategory(totalTonnes: number): EmissionCategoryType {
   if (totalTonnes < 4) return "LOW";
   if (totalTonnes < 8) return "MODERATE";
@@ -177,6 +218,13 @@ export function getEmissionCategory(totalTonnes: number): EmissionCategoryType {
   return "VERY_HIGH";
 }
 
+/**
+ * Aggregates all carbon assessment categories into a single carbon profile.
+ * Computes individual category tonnes, total footprint, and overall classification rating.
+ * 
+ * @param data Completed assessment questionnaire details.
+ * @returns Standard carbon footprint results dashboard schema.
+ */
 export function calculateCarbonProfile(data: AssessmentData): CarbonProfileResult {
   const transport = calculateTransport(data.transport);
   const food = calculateFood(data.food);

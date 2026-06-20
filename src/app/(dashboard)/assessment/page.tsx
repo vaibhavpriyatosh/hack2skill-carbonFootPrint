@@ -62,11 +62,15 @@ export default function AssessmentPage() {
     }
   });
 
-  const updateField = (category: string, field: string, value: any) => {
+  const updateField = <C extends keyof typeof formData, F extends keyof typeof formData[C]>(
+    category: C,
+    field: F,
+    value: typeof formData[C][F]
+  ) => {
     setFormData(prev => ({
       ...prev,
       [category]: {
-        ...prev[category as keyof typeof prev],
+        ...prev[category],
         [field]: value
       }
     }));

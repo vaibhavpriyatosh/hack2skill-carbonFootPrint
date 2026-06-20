@@ -7,6 +7,7 @@ import { generateAndSaveRecommendations } from "@/lib/gemini/recommendations";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 
 const assessmentSchema = z.object({
   transport: z.object({
@@ -60,17 +61,30 @@ const assessmentSchema = z.object({
   }),
 });
 
-export async function submitAssessment(data: any) {
+/**
+ * Handles the submission of a user's multi-step carbon footprint assessment.
+ * Parses and validates input data using Zod, calculates the user's carbon profile details,
+ * saves both the raw assessment and calculated profile to the database in a transaction,
+ * triggers an asynchronous AI recommendations call, and redirects the user to their dashboard.
+ *
+ * @param data The raw assessment form data submitted from the UI.
+ * @returns An error response object if validation or execution fails.
+ */
+export async function submitAssessment(data: unknown): Promise<{ error?: string } | never> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
     return { error: "You must be logged in to submit an assessment." };
   }
 
-  const userExists = await prisma.user.findUnique({ where: { id: userId } });
+  const userExists = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true }
+  });
   if (!userExists) {
     // Stale cookie: clear the session so middleware doesn't redirect back to /dashboard
     await signOut({ redirectTo: "/login" });
+    return { error: "Session invalid. Please log in again." };
   }
   
   const validatedFields = assessmentSchema.safeParse(data);
@@ -89,11 +103,11 @@ export async function submitAssessment(data: any) {
       const assessment = await tx.assessment.create({
         data: {
           userId,
-          transportData: assessmentData.transport as any,
-          foodData: assessmentData.food as any,
-          energyData: assessmentData.energy as any,
-          shoppingData: assessmentData.shopping as any,
-          digitalData: assessmentData.digital as any,
+          transportData: assessmentData.transport as Prisma.InputJsonValue,
+          foodData: assessmentData.food as Prisma.InputJsonValue,
+          energyData: assessmentData.energy as Prisma.InputJsonValue,
+          shoppingData: assessmentData.shopping as Prisma.InputJsonValue,
+          digitalData: assessmentData.digital as Prisma.InputJsonValue,
           status: "COMPLETED",
           completedAt: new Date(),
         }
@@ -127,13 +141,17 @@ export async function submitAssessment(data: any) {
       shoppingEmissions: profile.shoppingEmissions,
       digitalEmissions: profile.digitalEmissions,
       category: profile.category,
+    }).catch((err) => {
+      console.error("Failed to generate AI recommendations in background:", err);
     });
     
-  } catch (error: any) {
-    console.error("Failed to save assessment:", error);
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Failed to save assessment:", errorMsg);
     return { error: "Failed to save assessment to database." };
   }
   
   revalidatePath("/dashboard");
   redirect("/dashboard");
 }
+

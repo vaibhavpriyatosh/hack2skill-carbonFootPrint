@@ -23,14 +23,14 @@ export const authConfig = {
     jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.username = (user as any).username;
+        token.username = user.username;
       }
       return token;
     },
     session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        (session.user as any).username = token.username as string;
+        session.user.username = token.username as string;
       }
       return session;
     },
